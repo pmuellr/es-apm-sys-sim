@@ -11,10 +11,10 @@ These metrics - and many more! - are typically written into indices named
 The following fields are written to the elasticsearch index:
 
     @timestamp                - current time
-    host.name	              - from parameter
+    host.name                 - from parameter
     system.cpu.total.norm.pct - changeable via keystroke
     system.memory.actual.free - changeable via keystroke
-    system.memory.total	      - 1,000,000
+    system.memory.total       - 1,000,000
 
 
 example
