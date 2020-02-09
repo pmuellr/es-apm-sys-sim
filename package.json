@@ -1,0 +1,38 @@
+{
+  "name": "es-apm-sys-sim",
+  "version": "1.0.0",
+  "private": true,
+  "description": "elasticsearch apm system metrics simulator",
+  "license": "MIT",
+  "author": "Patrick Mueller <pmuellr@apache.org> (https://github.com/pmuellr)",
+  "homepage": "https://github.com/pmuellr/es-apm-sys-sim",
+  "bin": {
+    "es-apm-sys-sim": "es-apm-sys-sim.js"
+  },
+  "scripts": {
+    "standard": "standard --verbose",
+    "test": "npm run -s standard",
+    "watch": "nodemon --exec 'npm run -s test'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pmuellr/es-apm-sys-sim.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pmuellr/es-apm-sys-sim/issues"
+  },
+  "standard": {
+    "ignore": [
+      "tmp/**/*",
+      "docs/**/*"
+    ]
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.2",
+    "standard": "^14.3.1"
+  },
+  "dependencies": {
+    "@elastic/elasticsearch": "^7.5.1",
+    "meow": "^6.0.0"
+  }
+}
