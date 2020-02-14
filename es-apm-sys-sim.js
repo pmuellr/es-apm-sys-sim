@@ -6,7 +6,7 @@ const meow = require('meow')
 const es = require('@elastic/elasticsearch')
 
 const DEBUG = process.env.DEBUG != null
-const MAX_MEM = 1000 * 1000
+const MAX_MEM = 1000 * 1000 // ONE WHOLE MEGABYTE OF MEMORY!!!
 const { createSineMetric } = require('./lib/sine-metric')
 
 const cliOptions = meow(getHelp(), {

@@ -2,8 +2,8 @@ es-apm-sys-sim - elasticsearch apm system metrics simulator
 ================================================================================
 
 `es-apm-sys-sim` is an elasticsearch apm system metrics simulator, indexing
-documents directly into elasticsearch, allowing metrics being written to be
-modified live via keypress.
+documents directly into elasticsearch, changing the values based on a sine
+wave.
 
 These metrics - and many more! - are typically written into indices named
 `apm-{stack-version}-metric-{ilm-rollover-index}`
@@ -21,34 +21,11 @@ example
 ================================================================================
 
 ```console
-$ es-apm-sys-sim 1 apm-sys-sim https://elastic:changeme@localhost:9200
+$ es-apm-sys-sim 1 1 apm-sys-sim https://elastic:changeme@localhost:9200
 
-----------------------------------------------------
-help: press "q" to exit, "h" for help
-  host-A: press q/w to modify cpu, e/r to modify mem
-  host-B: press a/s to modify cpu, d/f to modify mem
-  host-C: press z/x to modify cpu, c/v to modify mem
-
-current data written:
-  host-A cpu:  0.4 free mem: 400KB
-  host-B cpu:  0.4 free mem: 400KB
-  host-C cpu:  0.4 free mem: 400KB
-----------------------------------------------------
-                                 (key q pressed now)
-current data written:
-  host-A cpu:  0.3 free mem: 400KB
-  host-B cpu:  0.4 free mem: 400KB
-  host-C cpu:  0.4 free mem: 400KB
-                                 (key q pressed now)
-current data written:
-  host-A cpu:  0.2 free mem: 400KB
-  host-B cpu:  0.4 free mem: 400KB
-  host-C cpu:  0.4 free mem: 400KB
-                                 (key q pressed now)
-current data written:
-  host-A cpu:  0.1 free mem: 400KB
-  host-B cpu:  0.4 free mem: 400KB
-  host-C cpu:  0.4 free mem: 400KB
+total docs written: 116
+total docs written: 236
+...
 ...
 ```
 
@@ -57,19 +34,14 @@ usage
 ================================================================================
 
 ```
-es-apm-sys-sim <interval> <index-name> <elastic-search-url>
+es-apm-sys-sim <interval> <instances> <index-name> <elastic-search-url>
 ```
 
 Every `<interval>` seconds, documents will be written to `<index-name>` at
-the elasticsearch cluster `<elastic-search-url>` using host names
-`host-A`, `host-B`, and `host-C`.
+the elasticsearch cluster `<elastic-search-url>` for `<instances>` number
+of hosts.
 
-You can quit the program by pressing `q` or `control-c`.  
-
-You can change the `system.cpu.total.norm.pct` and ``system.memory.actual.free`
-values written by pressing keys listed in the console output.
-
-Every 30 seconds, the number of documents indexed is logged.
+You can quit the program by pressing `control-c`.  
 
 The documents written are pretty minimal - open an issue or PR if you want
 more fields.
