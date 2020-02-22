@@ -8,12 +8,18 @@ const es = require('@elastic/elasticsearch')
 const DEBUG = process.env.DEBUG != null
 const MAX_MEM = 1000 * 1000 // ONE WHOLE MEGABYTE OF MEMORY!!!
 const { createSineMetric } = require('./lib/sine-metric')
+const { createRandomMetric } = require('./lib/random-metric')
 
 const cliOptions = meow(getHelp(), {
   flags: {
     help: {
       type: 'boolean',
       alias: 'h',
+      default: false
+    },
+    random: {
+      type: 'boolean',
+      alias: 'r',
       default: false
     }
   }
@@ -23,6 +29,10 @@ if (cliOptions.flags.help || cliOptions.input.length === 0) {
   console.log(getHelp())
   process.exit(1)
 }
+
+const random = !!cliOptions.flags.random
+const mode = random ? 'random walks' : 'sine waves'
+console.log(`generating data based on ${mode}`)
 
 const [intervalS, instancesS, indexName, clusterURL] = cliOptions.input
 
@@ -41,6 +51,7 @@ let DocsWritten = 0
 
 setImmediate(main)
 
+/** @type { () =>void } */
 function main() {
   let esClient
 
@@ -57,7 +68,7 @@ function main() {
   
   const hosts = []
   for (let i = 0; i < instances; i++) {
-    hosts.push(new Host(i, 16 * (i + 1)))
+    hosts.push(new Host(i, 16 * (i + 1), random))
   }
 
   setInterval(update, 1000 * interval)
@@ -72,20 +83,24 @@ function main() {
 }
 
 class Host {
-  constructor(instance, period) {
+  constructor(instance, period, random) {
     this.hostName = `host-${String.fromCharCode(instance + 65)}`
-    this.cpuMetric = createSineMetric({
+    this.random = random
+
+    const createMetric = random ? createRandomMetric : createSineMetric
+    this.cpuMetric = createMetric({
       min: 0,
       max: 100,
       period,
     })    
-    this.memMetric = createSineMetric({
+    this.memMetric = createMetric({
       min:  0,
       max: MAX_MEM * 4 / 10,
       period,
     })    
   }
 
+  /** @type { () => any } */
   nextDocument() {
     const cpu = this.cpuMetric.next()
     const mem = this.memMetric.next()
@@ -93,10 +108,12 @@ class Host {
   }
 }
 
+/** @type { () => void } */
 function logDocsWritten () {
   console.log(`total docs written: ${DocsWritten}`)
 }
 
+/** @type { (esClient: any, doc: any) => Promise<void> } */
 async function writeDoc (esClient, doc) {
   if (DEBUG) console.log(`writing doc ${indexName}: ${JSON.stringify(doc)}`)
   let response
@@ -116,6 +133,7 @@ async function writeDoc (esClient, doc) {
   DocsWritten++
 }
 
+/** @type { (hostName: string, cpu: number, mem: number) => any } */
 function getDocument(hostName, cpu, mem) {
   return {
     '@timestamp': new Date().toISOString(),
@@ -140,12 +158,16 @@ function getDocument(hostName, cpu, mem) {
   }
 }
 
+/** @type { () => string } */
 function getHelp () {
   return `
-es-apm-sys-sim <intervalSeconds> <instances> <indexName> <clusterURL>
+es-apm-sys-sim [--random|-r] <intervalSeconds> <instances> <indexName> <clusterURL>
 
 Writes apm system metrics documents on an interval, the cpu usage and
-free mem metrics changing based on sine waves.
+free mem metrics.
+
+If the --random or -r flag is used, the data generated is based on random walks,
+otherwise it's based on sine waves.
 
 Fields in documents written:
   @timestamp                 current time
@@ -157,6 +179,7 @@ Fields in documents written:
 `.trim()
 }
 
+/** @type { (string) => void } */
 function logError (message) {
   console.log(message)
   process.exit(1)
