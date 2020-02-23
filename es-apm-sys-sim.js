@@ -3,6 +3,7 @@
 'use strict'
 
 const meow = require('meow')
+const hJSON = require('hjson')
 const es = require('@elastic/elasticsearch')
 
 const DEBUG = process.env.DEBUG != null
@@ -71,13 +72,27 @@ function main() {
     hosts.push(new Host(i, 16 * (i + 1), random))
   }
 
+
+  setImmediate(update)
   setInterval(update, 1000 * interval)
   setInterval(logDocsWritten, 1000 * 30)
 
+  let wroteSampleDoc = false
   function update() {
     for (const host of hosts) {
       const doc = host.nextDocument()
       writeDoc(esClient, doc)
+
+      if (!wroteSampleDoc) {
+        wroteSampleDoc = true
+        const printable = hJSON.stringify(doc, {
+          //@ts-ignore doesn't like condense option
+          condense: 10000,
+          bracesSameLine: true,
+        })
+        //@ts-ignore doesn't like condense option
+        console.log(`sample doc:`, printable)
+      }
     }
   }
 }
