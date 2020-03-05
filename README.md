@@ -3,17 +3,17 @@ es-apm-sys-sim - elasticsearch apm system metrics simulator
 
 `es-apm-sys-sim` is an elasticsearch apm system metrics simulator, indexing
 documents directly into elasticsearch, changing the values based on a sine
-wave.
+wave, or random walk.
 
 These metrics - and many more! - are typically written into indices named
 `apm-{stack-version}-metric-{ilm-rollover-index}`
 
-The following fields are written to the elasticsearch index:
+The following fields are written to the elasticsearch index by this utility:
 
     @timestamp                - current time
     host.name                 - from parameter
-    system.cpu.total.norm.pct - changeable via keystroke
-    system.memory.actual.free - changeable via keystroke
+    system.cpu.total.norm.pct - changes over time
+    system.memory.actual.free - changes over time
     system.memory.total       - 1,000,000
 
 
@@ -34,12 +34,15 @@ usage
 ================================================================================
 
 ```
-es-apm-sys-sim <interval> <instances> <index-name> <elastic-search-url>
+es-apm-sys-sim [--random|-r] <interval> <instances> <index-name> <elastic-search-url>
 ```
 
 Every `<interval>` seconds, documents will be written to `<index-name>` at
 the elasticsearch cluster `<elastic-search-url>` for `<instances>` number
 of hosts.
+
+The `-r` `--random` flag will change the values based on a random walk, instead
+of basing the changing values on sine waves.
 
 You can quit the program by pressing `control-c`.  
 
@@ -56,15 +59,15 @@ more fields.
         cpu: {
             total: {
                 norm: {
-                    pct: 0 // changeable via keypress
+                    pct: 0.5
                 }
             }
         },
         memory: {
             actual: {
-                free: 0 // changeable via keypress
+                free: 400000
             }
-            total: 1,000,000
+            total: 1000000
         }
     }
 }
