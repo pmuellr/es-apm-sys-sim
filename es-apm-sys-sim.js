@@ -105,7 +105,7 @@ class Host {
     const createMetric = random ? createRandomMetric : createSineMetric
     this.cpuMetric = createMetric({
       min: 0,
-      max: 100,
+      max: 1,
       period,
     })    
     this.memMetric = createMetric({
