@@ -6,16 +6,31 @@ const meow = require('meow')
 const hJSON = require('hjson')
 const es = require('@elastic/elasticsearch')
 
-const DEBUG = process.env.DEBUG != null
-const MAX_MEM = 1000 * 1000 // ONE WHOLE MEGABYTE OF MEMORY!!!
 const { createSineMetric } = require('./lib/sine-metric')
 const { createRandomMetric } = require('./lib/random-metric')
+const { createStepMetric } = require('./lib/step-metric')
+const { createKeyboard } = require('./lib/keyboard')
+
+const DEBUG = process.env.DEBUG != null
+const MAX_MEM = 1000 * 1000 // ONE WHOLE MEGABYTE OF MEMORY!!!
+
+const hostKeys = [
+  { inc: '1', dec: 'q' },
+  { inc: '2', dec: 'w' },
+  { inc: '3', dec: 'e' },
+  { inc: '4', dec: 'r' },
+]
 
 const cliOptions = meow(getHelp(), {
   flags: {
     help: {
       type: 'boolean',
       alias: 'h',
+      default: false
+    },
+    keys: {
+      type: 'boolean',
+      alias: 'k',
       default: false
     },
     random: {
@@ -31,9 +46,14 @@ if (cliOptions.flags.help || cliOptions.input.length === 0) {
   process.exit(1)
 }
 
-const random = !!cliOptions.flags.random
-const mode = random ? 'random walks' : 'sine waves'
+const isRandom = !!cliOptions.flags.random
+const isKeys = !!cliOptions.flags.keys
+if (isRandom && isKeys) logError('--random and --keys can not be used together')
+
+const mode = isRandom ? 'random walks' : isKeys ? 'keys pressed' : 'sine waves'
 console.log(`generating data based on ${mode}`)
+
+const maxInstances = isKeys ? 4 : 1000
 
 const [intervalS, instancesS, indexName, clusterURL] = cliOptions.input
 
@@ -42,13 +62,16 @@ const interval = parseInt(intervalS, 10)
 if (isNaN(interval)) logError(`invalid interval parameter: ${intervalS}`)
 
 if (instancesS == null) logError('instances parameter missing')
-const instances = parseInt(instancesS, 10)
+const instances = Math.min(maxInstances, parseInt(instancesS, 10))
 if (isNaN(instances)) logError(`invalid instances parameter: ${intervalS}`)
 
 if (indexName == null) logError('indexName parameter missing')
 if (clusterURL == null) logError('clusterURL parameter missing')
 
 let DocsWritten = 0
+
+/** @type { Host[] } */
+const hosts = []
 
 setImmediate(main)
 
@@ -67,11 +90,20 @@ function main() {
     logError(`error creating ES client: ${err.message}`)
   }
   
-  const hosts = []
   for (let i = 0; i < instances; i++) {
-    hosts.push(new Host(i, 16 * (i + 1), random))
+    hosts.push(new Host(i, 16 * (i + 1), isRandom, isKeys))
   }
 
+  const kbd = createKeyboard()
+  kbd.on(null, printRuntimeHelp)
+  kbd.on('x', () => process.exit())
+  if (isKeys) {
+    for (const host of hosts) {
+      const key = String.fromCharCode(49 + host.instance)
+      kbd.on(hostKeys[host.instance].inc, () => host.inc())
+      kbd.on(hostKeys[host.instance].dec, () => host.dec())
+    }
+  }
 
   setImmediate(update)
   setInterval(update, 1000 * interval)
@@ -92,27 +124,61 @@ function main() {
         })
         //@ts-ignore doesn't like condense option
         console.log(`sample doc:`, printable)
+        console.log('')
       }
+
+      printCurrentStatus()
     }
   }
 }
 
-class Host {
-  constructor(instance, period, random) {
-    this.hostName = `host-${String.fromCharCode(instance + 65)}`
-    this.random = random
+function printRuntimeHelp () {
+  if (isKeys) {
+    console.log(`\n\nhelp: press "1" ... "${instances}" to increase, "q", "w", ... to decrease, "x" to exit`)
+  } else {
+    console.log(`\n\nhelp: press "x" to exit`)
+  }
+  printCurrentStatus()
+}
 
-    const createMetric = random ? createRandomMetric : createSineMetric
+function printCurrentStatus() {
+  const statuses = hosts.slice(0, 4).map(host => host.statusString())
+  const missing = hosts.length <= 4 ? '' : ` (${hosts.length - 4} hosts not shown)`
+  process.stdout.write(`\r${statuses.join('   ')}${missing}`)
+}
+
+function logDocsWritten () {
+  console.log(`\ntotal docs written: ${DocsWritten}`)
+}
+
+class Host {
+  constructor(instance, period, isRandom, isKeys) {
+    this.instance = instance
+    this.hostName = `host-${instance + 1}`
+    this.isKeys = isKeys
+
     this.cpuMetric = createMetric({
+      isKeys,
+      isRandom,
       min: 0,
       max: 1,
       period,
     })    
     this.memMetric = createMetric({
+      isKeys,
+      isRandom,
       min:  0,
       max: MAX_MEM * 4 / 10,
       period,
     })    
+  }
+
+  statusString() {
+    const cpu = this.cpuMetric.current.toFixed(2)
+    const mem = Math.round(this.memMetric.current / 1000)
+    const memS = `${mem}`.padStart(3)
+
+    return `${this.hostName}: cpu: ${cpu} mfr: ${memS}K`
   }
 
   /** @type { () => any } */
@@ -121,11 +187,26 @@ class Host {
     const mem = this.memMetric.next()
     return getDocument(this.hostName, cpu, mem)
   }
+
+  inc() {
+    if (!this.isKeys) return
+    this.cpuMetric.inc()
+    this.memMetric.inc()
+    printCurrentStatus()
+  }
+
+  dec() {
+    if (!this.isKeys) return
+    this.cpuMetric.dec()
+    this.memMetric.dec()
+    printCurrentStatus()
+  }
 }
 
-/** @type { () => void } */
-function logDocsWritten () {
-  console.log(`total docs written: ${DocsWritten}`)
+function createMetric ({isRandom, isKeys, min, max, period}) {
+  if (isRandom) return createRandomMetric({ min, max });
+  if (isKeys) return createStepMetric({ min, max });
+  return createSineMetric({ min, max, period });
 }
 
 /** @type { (esClient: any, doc: any) => Promise<void> } */
@@ -176,13 +257,22 @@ function getDocument(hostName, cpu, mem) {
 /** @type { () => string } */
 function getHelp () {
   return `
-es-apm-sys-sim [--random|-r] <intervalSeconds> <instances> <indexName> <clusterURL>
+es-apm-sys-sim [options] <intervalSeconds> <instances> <indexName> <clusterURL>
 
 Writes apm system metrics documents on an interval, the cpu usage and
 free mem metrics.
 
+options:
+  -r, --random
+  -k, --keys
+
 If the --random or -r flag is used, the data generated is based on random walks,
 otherwise it's based on sine waves.
+
+If the --keys or -k flag is used, the data generated based on keys pressed.  The
+maximum number of instances will be 4.
+
+Otherwise, the data generated is based on sine waves.
 
 Fields in documents written:
   @timestamp                 current time

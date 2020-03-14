@@ -3,15 +3,13 @@ es-apm-sys-sim - elasticsearch apm system metrics simulator
 
 `es-apm-sys-sim` is an elasticsearch apm system metrics simulator, indexing
 documents directly into elasticsearch, changing the values based on a sine
-wave, or random walk.
-
-These metrics - and many more! - are typically written into indices named
-`apm-{stack-version}-metric-{ilm-rollover-index}`
+wave, random walk, or keys pressed.
 
 The following fields are written to the elasticsearch index by this utility:
 
     @timestamp                - current time
     host.name                 - from parameter
+    host.name.keyword         - keyword version of host.name
     system.cpu.total.norm.pct - changes over time
     system.memory.actual.free - changes over time
     system.memory.total       - 1,000,000
@@ -21,12 +19,11 @@ example
 ================================================================================
 
 ```console
-$ es-apm-sys-sim 1 1 apm-sys-sim https://elastic:changeme@localhost:9200
+$ es-apm-sys-sim.js 1 2 es-apm-sys-sim $ES_URL
+generating data based on sine waves
+...
 
-total docs written: 116
-total docs written: 236
-...
-...
+host-1: cpu: 0.31 mfr: 123K   host-2: cpu: 0.99 mfr: 396K
 ```
 
 
@@ -34,17 +31,22 @@ usage
 ================================================================================
 
 ```
-es-apm-sys-sim [--random|-r] <interval> <instances> <index-name> <elastic-search-url>
+es-apm-sys-sim [options] <interval> <instances> <index-name> <elastic-search-url>
 ```
 
 Every `<interval>` seconds, documents will be written to `<index-name>` at
 the elasticsearch cluster `<elastic-search-url>` for `<instances>` number
-of hosts.
+of hosts.  The cpu and free memory values will change over time.  By default,
+the changes are based on sine waves, with each subsequent instances using a
+longer periods.
 
-The `-r` `--random` flag will change the values based on a random walk, instead
-of basing the changing values on sine waves.
+options:
 
-You can quit the program by pressing `control-c`.  
+* `-r` `--random` - change the values based on a random walk, instead of sine waves
+* `-k` `--keys` - change the values based on pressed keys; the maximum number of
+  instances will be 4.
+
+You can quit the program by pressing `x`.  
 
 The documents written are pretty minimal - open an issue or PR if you want
 more fields.
