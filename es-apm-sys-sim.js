@@ -13,6 +13,11 @@ const { createKeyboard } = require('./lib/keyboard')
 
 const DEBUG = process.env.DEBUG != null
 const MAX_MEM = 1000 * 1000 // ONE WHOLE MEGABYTE OF MEMORY!!!
+const DEFAULT_INDEX_NAME = 'es-apm-sys-sim'
+const DEFAULT_CLUSTER_URL = 'http://elastic:changeme@localhost:9200'
+const DEFAULT_CLUSTER_URL_ENV = 'ES_URL'
+const DEFAULT_HOSTS = 2
+const MAX_DISPLAYED_HOSTS = 4
 
 const hostKeys = [
   { inc: '1', dec: 'q' },
@@ -53,25 +58,34 @@ if (isRandom && isKeys) logError('--random and --keys can not be used together')
 const mode = isRandom ? 'random walks' : isKeys ? 'keys pressed' : 'sine waves'
 console.log(`generating data based on ${mode}`)
 
-const maxInstances = isKeys ? 4 : 1000
+const maxHosts = isKeys ? MAX_DISPLAYED_HOSTS : 1000
 
-const [intervalS, instancesS, indexName, clusterURL] = cliOptions.input
-
+const [
+  intervalS, 
+  hostsS = `${DEFAULT_HOSTS}`, 
+  indexName = DEFAULT_INDEX_NAME, 
+  clusterURL = process.env[DEFAULT_CLUSTER_URL_ENV] || DEFAULT_CLUSTER_URL
+] = cliOptions.input
 if (intervalS == null) logError('interval parameter missing')
+
 const interval = parseInt(intervalS, 10)
 if (isNaN(interval)) logError(`invalid interval parameter: ${intervalS}`)
 
-if (instancesS == null) logError('instances parameter missing')
-const instances = Math.min(maxInstances, parseInt(instancesS, 10))
-if (isNaN(instances)) logError(`invalid instances parameter: ${intervalS}`)
+const hosts = Math.min(maxHosts, parseInt(hostsS, 10))
+if (isNaN(hosts)) logError(`invalid hosts parameter: ${intervalS}`)
 
-if (indexName == null) logError('indexName parameter missing')
-if (clusterURL == null) logError('clusterURL parameter missing')
+console.log([
+  `running with`,
+  `interval: ${interval} sec;`,
+  `hosts: ${hosts};`,
+  `indexName: ${indexName};`,
+  `clusterURL: ${clusterURL}`
+].join(' '))
 
 let DocsWritten = 0
 
 /** @type { Host[] } */
-const hosts = []
+const Hosts = []
 
 setImmediate(main)
 
@@ -90,15 +104,16 @@ function main() {
     logError(`error creating ES client: ${err.message}`)
   }
   
-  for (let i = 0; i < instances; i++) {
-    hosts.push(new Host(i, 16 * (i + 1), isRandom, isKeys))
+  for (let i = 0; i < hosts; i++) {
+    Hosts.push(new Host(i, 16 * (i + 1), isRandom, isKeys))
   }
 
   const kbd = createKeyboard()
   kbd.on(null, printRuntimeHelp)
   kbd.on('x', () => process.exit())
+  kbd.on('ctrl-c', () => process.exit())
   if (isKeys) {
-    for (const host of hosts) {
+    for (const host of Hosts) {
       const key = String.fromCharCode(49 + host.instance)
       kbd.on(hostKeys[host.instance].inc, () => host.inc())
       kbd.on(hostKeys[host.instance].dec, () => host.dec())
@@ -107,11 +122,10 @@ function main() {
 
   setImmediate(update)
   setInterval(update, 1000 * interval)
-  setInterval(logDocsWritten, 1000 * 30)
 
   let wroteSampleDoc = false
   function update() {
-    for (const host of hosts) {
+    for (const host of Hosts) {
       const doc = host.nextDocument()
       writeDoc(esClient, doc)
 
@@ -134,21 +148,19 @@ function main() {
 
 function printRuntimeHelp () {
   if (isKeys) {
-    console.log(`\n\nhelp: press "1" ... "${instances}" to increase, "q", "w", ... to decrease, "x" to exit`)
+    console.log(`\n\nhelp: press "1" ... "${hosts}" to increase, "q", "w", ... to decrease, "ctrl-c" or "x" to exit`)
   } else {
-    console.log(`\n\nhelp: press "x" to exit`)
+    console.log(`\n\nhelp: press "ctrl-c" to exit`)
   }
   printCurrentStatus()
 }
 
 function printCurrentStatus() {
-  const statuses = hosts.slice(0, 4).map(host => host.statusString())
-  const missing = hosts.length <= 4 ? '' : ` (${hosts.length - 4} hosts not shown)`
-  process.stdout.write(`\r${statuses.join('   ')}${missing}`)
-}
-
-function logDocsWritten () {
-  console.log(`\ntotal docs written: ${DocsWritten}`)
+  const statuses = Hosts.slice(0, MAX_DISPLAYED_HOSTS).map(host => host.statusString())
+  const missing = Hosts.length <= MAX_DISPLAYED_HOSTS ? '' : ` (${Hosts.length - MAX_DISPLAYED_HOSTS} not shown)`
+  statuses.push(missing)
+  statuses.push(`docs: ${DocsWritten}`)
+  process.stdout.write(`\r${statuses.join('   ')}`)
 }
 
 class Host {
@@ -178,7 +190,7 @@ class Host {
     const mem = Math.round(this.memMetric.current / 1000)
     const memS = `${mem}`.padStart(3)
 
-    return `${this.hostName}: cpu: ${cpu} mfr: ${memS}K`
+    return `${this.hostName}: c:${cpu} m:${memS}K`
   }
 
   /** @type { () => any } */
@@ -257,20 +269,25 @@ function getDocument(hostName, cpu, mem) {
 /** @type { () => string } */
 function getHelp () {
   return `
-es-apm-sys-sim [options] <intervalSeconds> <instances> <indexName> <clusterURL>
+es-apm-sys-sim [options] <intervalSeconds> [<hosts> [<indexName> [<clusterURL>]]]
 
-Writes apm system metrics documents on an interval, the cpu usage and
-free mem metrics.
+Writes apm system metrics documents containing cpu usage and free memory
+metrics, for the specified number of hosts, on the specified interval, to
+the specified index at the specified elasticsearch cluster.
+
+<hosts>      defaults to ${DEFAULT_HOSTS} if not supplied
+<indexName>  defaults to es-apm-sys-sim if not supplied
+<clusterURL> defaults to the environment variable ${DEFAULT_CLUSTER_URL_ENV} or the value
+             ${DEFAULT_CLUSTER_URL}
 
 options:
   -r, --random
   -k, --keys
 
-If the --random or -r flag is used, the data generated is based on random walks,
-otherwise it's based on sine waves.
+If the --random or -r flag is used, the data generated is based on random walks.
 
 If the --keys or -k flag is used, the data generated based on keys pressed.  The
-maximum number of instances will be 4.
+maximum number of hosts will be ${MAX_DISPLAYED_HOSTS}.
 
 Otherwise, the data generated is based on sine waves.
 
@@ -279,7 +296,7 @@ Fields in documents written:
   host.name                  host name 
   host.name.keyword          host name (keyword field for aggregations)
   system.cpu.total.norm.pct  cpu usage,    0 -> 1 
-  memory.actual.free         free memory,  0 -> 900KB 
+  memory.actual.free         free memory,  0 -> 400KB 
   memory.total               total memory, 1MB heh
 `.trim()
 }

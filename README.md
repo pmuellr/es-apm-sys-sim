@@ -1,9 +1,9 @@
 es-apm-sys-sim - elasticsearch apm system metrics simulator
 ================================================================================
 
-`es-apm-sys-sim` is an elasticsearch apm system metrics simulator, indexing
-documents directly into elasticsearch, changing the values based on a sine
-wave, random walk, or keys pressed.
+Writes apm system metrics documents containing cpu usage and free memory
+metrics, for the specified number of hosts, on the specified interval, to
+the specified index at the specified elasticsearch cluster.
 
 The following fields are written to the elasticsearch index by this utility:
 
@@ -19,11 +19,26 @@ example
 ================================================================================
 
 ```console
-$ es-apm-sys-sim.js 1 2 es-apm-sys-sim $ES_URL
+$ es-apm-sys-sim.js 10
 generating data based on sine waves
-...
+running with interval: 10 sec; hosts: 2; indexName: es-apm-sys-sim; clusterURL: https://elastic:changeme@localhost:9200
+sample doc: {
+  @timestamp: 2020-03-15T14:57:22.110Z
+  host: {name: "host-1"}
+  system: {
+    cpu: {
+      total: {
+        norm: {pct: 0.5}
+      }
+    }
+    memory: {
+      actual: {free: 200000}
+      total: 1000000
+    }
+  }
+}
 
-host-1: cpu: 0.31 mfr: 123K   host-2: cpu: 0.99 mfr: 396K
+host-1: c:0.69 m:277K   host-2: c:0.60 m:239K      docs: 2
 ```
 
 
@@ -31,14 +46,13 @@ usage
 ================================================================================
 
 ```
-es-apm-sys-sim [options] <interval> <instances> <index-name> <elastic-search-url>
+es-apm-sys-sim [options] <intervalSeconds> [<hosts> [<indexName> [<clusterURL>]]]
 ```
 
-Every `<interval>` seconds, documents will be written to `<index-name>` at
-the elasticsearch cluster `<elastic-search-url>` for `<instances>` number
-of hosts.  The cpu and free memory values will change over time.  By default,
-the changes are based on sine waves, with each subsequent instances using a
-longer periods.
+Every `<intervalSeconds>` seconds, documents will be written to `<indexName>` at
+the elasticsearch cluster `<clusterURL>` for `<hosts>` number of hosts.  The cpu
+and free memory values will change over time.  By default, the changes are based
+on sine waves, with each subsequent instances using a longer periods.
 
 options:
 
@@ -46,34 +60,11 @@ options:
 * `-k` `--keys` - change the values based on pressed keys; the maximum number of
   instances will be 4.
 
-You can quit the program by pressing `x`.  
+You can quit the program by pressing `ctrl-c` or `x`.  
 
 The documents written are pretty minimal - open an issue or PR if you want
 more fields.
 
-```js
-{
-    @timestamp: '2019-12-15T17:16:44.765Z',
-    host: {
-        name: 'host-A'
-    },
-    system: {
-        cpu: {
-            total: {
-                norm: {
-                    pct: 0.5
-                }
-            }
-        },
-        memory: {
-            actual: {
-                free: 400000
-            }
-            total: 1000000
-        }
-    }
-}
-```
 
 install
 ================================================================================
