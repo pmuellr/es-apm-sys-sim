@@ -66,6 +66,16 @@ The documents written are pretty minimal - open an issue or PR if you want
 more fields.
 
 
+Kibana index pattern, visualization, dashboard
+================================================================================
+
+Also included are exported saved objects for the default index name for
+an index pattern, lens visualization, and dashboard embedding the visualization.
+
+Import this file in the Kibana / Management / Kibana / Saved Objects page:
+
+* [`es-apm-sys-sim.ndjson`](es-apm-sys-sim.ndjson)
+
 install
 ================================================================================
 
