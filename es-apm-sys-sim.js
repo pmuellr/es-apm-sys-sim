@@ -9,6 +9,7 @@ const es = require('@elastic/elasticsearch')
 const { createSineMetric } = require('./lib/sine-metric')
 const { createRandomMetric } = require('./lib/random-metric')
 const { createStepMetric } = require('./lib/step-metric')
+const { createFlapMetric } = require('./lib/flap-metric')
 const { createKeyboard } = require('./lib/keyboard')
 
 const DEBUG = process.env.DEBUG != null
@@ -42,6 +43,11 @@ const cliOptions = meow(getHelp(), {
       type: 'boolean',
       alias: 'r',
       default: false
+    },
+    flap: {
+      type: 'boolean',
+      alias: 'f',
+      default: false
     }
   }
 })
@@ -53,9 +59,17 @@ if (cliOptions.flags.help || cliOptions.input.length === 0) {
 
 const isRandom = !!cliOptions.flags.random
 const isKeys = !!cliOptions.flags.keys
-if (isRandom && isKeys) logError('--random and --keys can not be used together')
+const isFlap = !!cliOptions.flags.flap
+const used = (isRandom ? 1 : 0) + (isKeys ? 1 : 0) + (isFlap ? 1 : 0)
+if (used > 1) {
+  logError('--random, --keys, and --flap can not be used together')
+}
 
-const mode = isRandom ? 'random walks' : isKeys ? 'keys pressed' : 'sine waves'
+const mode = 
+  isRandom ? 'random walks' : 
+  isKeys ? 'keys pressed' : 
+  isFlap ? 'flapping' :
+  'sine waves'
 console.log(`generating data based on ${mode}`)
 
 const maxHosts = isKeys ? MAX_DISPLAYED_HOSTS : 1000
@@ -172,6 +186,7 @@ class Host {
     this.cpuMetric = createMetric({
       isKeys,
       isRandom,
+      isFlap,
       min: 0,
       max: 1,
       period,
@@ -179,6 +194,7 @@ class Host {
     this.memMetric = createMetric({
       isKeys,
       isRandom,
+      isFlap,
       min:  0,
       max: MAX_MEM * 4 / 10,
       period,
@@ -215,9 +231,10 @@ class Host {
   }
 }
 
-function createMetric ({isRandom, isKeys, min, max, period}) {
+function createMetric ({isRandom, isKeys, isFlap, min, max, period}) {
   if (isRandom) return createRandomMetric({ min, max });
   if (isKeys) return createStepMetric({ min, max });
+  if (isFlap) return createFlapMetric({ min, max });
   return createSineMetric({ min, max, period });
 }
 
@@ -283,11 +300,15 @@ the specified index at the specified elasticsearch cluster.
 options:
   -r, --random
   -k, --keys
+  -f, --flap
 
 If the --random or -r flag is used, the data generated is based on random walks.
 
 If the --keys or -k flag is used, the data generated based on keys pressed.  The
 maximum number of hosts will be ${MAX_DISPLAYED_HOSTS}.
+
+If the --flap or -f flag is used, the data generated will flap between the
+minimum and maximum values.
 
 Otherwise, the data generated is based on sine waves.
 
@@ -298,6 +319,8 @@ Fields in documents written:
   system.cpu.total.norm.pct  cpu usage,    0 -> 1 
   memory.actual.free         free memory,  0 -> 400KB 
   memory.total               total memory, 1MB heh
+
+home: https://github.com/pmuellr/es-apm-sys-sim
 `.trim()
 }
 
