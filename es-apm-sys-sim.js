@@ -134,8 +134,12 @@ function main() {
     }
   }
 
-  setImmediate(update)
+  setImmediate(async () => { await create(); update() })
   setInterval(update, 1000 * interval)
+
+  async function create() {
+    await createIndex(esClient)
+  }
 
   let wroteSampleDoc = false
   function update() {
@@ -238,6 +242,35 @@ function createMetric ({isRandom, isKeys, isFlap, min, max, period}) {
   return createSineMetric({ min, max, period });
 }
 
+/** @type { (esClient: any) => Promise<void> } */
+async function createIndex (esClient) {
+  if (DEBUG) console.log(`creating index ${indexName}`)
+  let response
+  try {
+    response = await esClient.indices.create({
+      index: indexName,
+      body: {
+        mappings: getIndexMappings(),
+      }
+    })
+  } catch (err) {
+    if (err.meta?.body?.error?.type === 'resource_already_exists_exception') {
+      console.log(`index ${indexName} already exists`)
+      return
+    }
+    logError(`error creating index: ${JSON.stringify(err, null, 4)}`)
+  }
+
+  if (response.body?.error?.type === 'resource_already_exists_exception') {
+    console.log(`index ${indexName} already exists`)
+    return
+  }
+
+  if (response.statusCode !== 200) {
+    logError(`unexpected error creating index: ${JSON.stringify(response, null, 4)}`)
+  }
+}
+
 /** @type { (esClient: any, doc: any) => Promise<void> } */
 async function writeDoc (esClient, doc) {
   if (DEBUG) console.log(`writing doc ${indexName}: ${JSON.stringify(doc)}`)
@@ -328,4 +361,33 @@ home: https://github.com/pmuellr/es-apm-sys-sim
 function logError (message) {
   console.log(message)
   process.exit(1)
+}
+
+function getIndexMappings() {
+  const date = 'date'
+  const keyword = 'keyword'
+  const float = 'float'
+  const long = 'long'
+
+  return {
+    properties: {
+      "@timestamp": {
+        type: date
+      },
+      host: {
+        properties: { name: { type: keyword } }
+      },
+      system: { 
+        properties: 
+        { cpu: { properties: { total: { properties: { norm: { properties: { pct: { type: float } } } } } } },
+          memory: {
+            properties: {
+              actual: { properties: { free: { type: long } } },
+              total: { type: long }
+            }
+          }
+        }
+      }
+    }
+  }
 }
