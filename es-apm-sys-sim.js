@@ -2,6 +2,8 @@
 
 'use strict'
 
+/** @typedef { import('./lib/launchpad').Launchpad } Launchpad */
+
 const meow = require('meow')
 const hJSON = require('hjson')
 const es = require('@elastic/elasticsearch')
@@ -11,6 +13,8 @@ const { createRandomMetric } = require('./lib/random-metric')
 const { createStepMetric } = require('./lib/step-metric')
 const { createFlapMetric } = require('./lib/flap-metric')
 const { createKeyboard } = require('./lib/keyboard')
+const { createLaunchpadMetric } = require('./lib/launchpad-metric')
+const { createLaunchpad } = require('./lib/launchpad')
 
 const DEBUG = process.env.DEBUG != null
 const MAX_MEM = 1000 * 1000 // ONE WHOLE MEGABYTE OF MEMORY!!!
@@ -48,6 +52,11 @@ const cliOptions = meow(getHelp(), {
       type: 'boolean',
       alias: 'f',
       default: false
+    },
+    launchpad: {
+      type: 'boolean',
+      alias: 'l',
+      default: false
     }
   }
 })
@@ -60,15 +69,17 @@ if (cliOptions.flags.help || cliOptions.input.length === 0) {
 const isRandom = !!cliOptions.flags.random
 const isKeys = !!cliOptions.flags.keys
 const isFlap = !!cliOptions.flags.flap
-const used = (isRandom ? 1 : 0) + (isKeys ? 1 : 0) + (isFlap ? 1 : 0)
+const isLaunchpad = !!cliOptions.flags.launchpad
+const used = (isRandom ? 1 : 0) + (isKeys ? 1 : 0) + (isFlap ? 1 : 0) + (isLaunchpad ? 1 : 0)
 if (used > 1) {
-  logError('--random, --keys, and --flap can not be used together')
+  logError('--random, --keys, --flap and --launchpad can not be used together')
 }
 
 const mode = 
   isRandom ? 'random walks' : 
   isKeys ? 'keys pressed' : 
   isFlap ? 'flapping' :
+  isLaunchpad ? 'launchpad' :
   'sine waves'
 console.log(`generating data based on ${mode}`)
 
@@ -118,8 +129,14 @@ function main() {
     logError(`error creating ES client: ${err.message}`)
   }
   
+  /** @type { Launchpad } */
+  let launchpad
+  if (isLaunchpad) {
+    launchpad = createLaunchpad()
+  }
+
   for (let i = 0; i < hosts; i++) {
-    Hosts.push(new Host(i, 16 * (i + 1), isRandom, isKeys))
+    Hosts.push(new Host(i, 16 * (i + 1), isRandom, isKeys, isLaunchpad, launchpad))
   }
 
   const kbd = createKeyboard()
@@ -178,15 +195,19 @@ function printCurrentStatus() {
 }
 
 class Host {
-  constructor(instance, period, isRandom, isKeys) {
+  constructor(instance, period, isRandom, isKeys, isLaunchpad, launchpad) {
     this.instance = instance
     this.hostName = `host-${instance + 1}`
     this.isKeys = isKeys
+    this.isLaunchpad = isLaunchpad
+    this.launchpad = launchpad
 
     this.cpuMetric = createMetric({
       isKeys,
       isRandom,
       isFlap,
+      isLaunchpad,
+      launchpad,
       min: 0,
       max: 1,
       period,
@@ -195,6 +216,8 @@ class Host {
       isKeys,
       isRandom,
       isFlap,
+      isLaunchpad,
+      launchpad,
       min:  0,
       max: MAX_MEM * 4 / 10,
       period,
@@ -231,10 +254,11 @@ class Host {
   }
 }
 
-function createMetric ({isRandom, isKeys, isFlap, min, max, period}) {
+function createMetric ({isRandom, isKeys, isFlap, isLaunchpad, min, max, period}) {
   if (isRandom) return createRandomMetric({ min, max });
   if (isKeys) return createStepMetric({ min, max });
   if (isFlap) return createFlapMetric({ min, max });
+  if (isLaunchpad) return createLaunchpadMetric({ min, max });
   return createSineMetric({ min, max, period });
 }
 
